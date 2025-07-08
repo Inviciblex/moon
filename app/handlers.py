@@ -7,52 +7,50 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 import app.keyboards as kb
 import config
-import sqlite3
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from app.keyboards import edit_or_delete_keyboard
 from app.keyboards import after_registration_keyboard
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.filters import Command
-from contextlib import closing
 from aiogram.exceptions import TelegramForbiddenError
 from config import ADMINS
-from aiogram.types import Message
+from database.create import SAVE_FORM
+from database.queries import *
+from database.connection import connection
+import os
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
+
+load_dotenv()
 
 from app.keyboards import update_buttons_after_dislike  # Импорт дизлайка... Иначе он не работал
 
-conn = sqlite3.connect("../users.db")
-cursor = conn.cursor()
+#conn = await connection()
+#cursor = conn.cursor()
 router = Router()
-bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=os.getenv('BOT_TOKEN'), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
-import sqlite3
-from datetime import datetime, timedelta
 
 
 async def update_message_count(user_id: int):
-    # Подключение к базе данных SQLite
-    conn = sqlite3.connect("../users.db")
-    cursor = conn.cursor()
-
+    conn = await connection()
     # Обновление количества отправленных сообщений для пользователя
-    cursor.execute("UPDATE profiles SET message_count = message_count + 1 WHERE user_id = ?", (user_id,))
-
+    await conn.execute(UPDATE_MESSAGE_COUNT, user_id)
     # Сохранение изменений и закрытие соединения
-    conn.commit()
-    conn.close()
+    await conn.close()
 
 
-def update_last_activity(user_id):
-    conn = sqlite3.connect("../users.db")
-    cursor = conn.cursor()
+async def update_last_activity(user_id):
+    conn = await connection()
     current_time = datetime.now().isoformat()  # Получаем текущее время
-    cursor.execute("UPDATE profiles SET last_activity = ? WHERE user_id = ?", (current_time, user_id))
-    conn.commit()
-    conn.close()  # Закрываем соединение с базой данных
+    await conn.execute(UPDATE_LAST_ACTIVITY, current_time, user_id)
+    await conn.close()  # Закрываем соединение с базой данных
 
-def get_user_info(user_id):
-    cursor.execute("SELECT name, age, description, photo_id FROM profiles WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
+
+async def get_user_info(user_id):
+    conn = await connection()
+    result = await conn.fetchrow(GET_USER_INFO, user_id)
+    #result = conn.fetchone()
     if result:
         return {
             'name': result[0],
@@ -63,18 +61,16 @@ def get_user_info(user_id):
     return None  # Возвращаем None, если пользователь не найден
 
 
-def reset_likes(user_id):
-    conn = sqlite3.connect("../users.db")
-    cursor = conn.cursor()
+async def reset_likes(user_id):
+    conn = await connection()
 
     # Удаляем лайки, которые пользователь поставил
-    cursor.execute("DELETE FROM likes WHERE user_id = ?", (user_id,))
+    await conn.execute(DELETE_SELF_LIKE, user_id)
 
     # Удаляем лайки, которые были поставлены на анкеты этого пользователя
-    cursor.execute("DELETE FROM likes WHERE liked_user_id = ?", (user_id,))
+    await conn.execute(DELETE_SEND_LIKE, user_id)
 
-    conn.commit()
-    conn.close()
+    await conn.close()
 
 
 # Состояния регистрации
@@ -91,7 +87,7 @@ class RegistrationStates(StatesGroup):
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -110,10 +106,10 @@ async def cmd_start(message: types.Message):
 async def cmd_register(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
     username = message.from_user.username  # Получаем username пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
-    reset_likes(user_id)     # Сбрасываем лайки перед редактированием анкеты
+    await reset_likes(user_id)     # Сбрасываем лайки перед редактированием анкеты
 
     await state.set_state(RegistrationStates.waiting_for_gender)  # Устанавливаем состояние
     await message.answer("Какой у вас пол? Выберите вариант:", reply_markup=await kb.gender_keyboard())
@@ -125,7 +121,7 @@ async def cmd_register(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_gender)
 async def process_gender(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -146,7 +142,7 @@ async def process_gender(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_age)
 async def process_age(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -167,7 +163,7 @@ async def process_age(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_name)
 async def process_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -185,7 +181,7 @@ async def process_name(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_description)
 async def process_description(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -203,7 +199,7 @@ async def process_description(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_target_gender)
 async def process_target_gender(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -221,7 +217,8 @@ async def process_target_gender(message: types.Message, state: FSMContext):
 @router.message(RegistrationStates.waiting_for_photo, F.photo)
 async def process_photo(message: types.Message, state: FSMContext):
     user_id = message.from_user.id  # Получаем ID пользователя
-    update_last_activity(user_id)  # Обновляем время активности
+    conn = await connection()
+    await update_last_activity(user_id)  # Обновляем время активности
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -233,9 +230,8 @@ async def process_photo(message: types.Message, state: FSMContext):
     username = message.from_user.username  # Получаем имя пользователя
 
     # Сохранение анкеты в базу данных
-    cursor.execute(
-        "INSERT OR REPLACE INTO profiles (user_id, name, age, gender, description, photo_id, target_gender, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ",
-        (
+    await conn.execute(
+        SAVE_FORM,
             user_id,
             data['name'],
             data['age'],
@@ -244,9 +240,8 @@ async def process_photo(message: types.Message, state: FSMContext):
             photo_id,
             data['target_gender'],
             username
-        )
     )
-    conn.commit()
+    await conn.close()
 
     # Завершение регистрации и отправка анкеты с фотографией
     await bot.send_photo(
@@ -273,7 +268,7 @@ async def process_photo(message: types.Message, state: FSMContext):
 
     await state.clear()  # Очищаем состояние
 
-import random
+#import random
 
 
 # Определение состояний
@@ -283,11 +278,9 @@ class PrivateMessageState(StatesGroup):
 
 # Функция для получения ID пользователя по username (пример)
 async def get_user_id_by_username(username):
-    conn = sqlite3.connect('../users.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM profiles WHERE username = ?", (username,))
-    result = cursor.fetchone()
-    conn.close()
+    conn = await connection()
+    result = conn.fetchrow(GET_ID_BY_USERNAME, username)
+    await conn.close()
     return result[0] if result else None
 
 
@@ -363,19 +356,17 @@ class BroadcastState(StatesGroup):
 
 # Функция для получения всех ID пользователей из базы данных
 async def get_all_user_ids():
-    cursor = sqlite3.connect('../users.db').cursor()
-    cursor.execute("SELECT user_id FROM profiles")
-    user_ids = [row[0] for row in cursor.fetchall()]
+    conn = await connection()
+    user_ids = await conn.fetch()
+    #user_ids = [row[0] for row in conn.fetchall()]
     return user_ids
 
 
 # Функция для удаления анкеты пользователя
 async def delete_user_profile(user_id):
-    conn = sqlite3.connect('../users.db')
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM profiles WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    conn = await connection()
+    await conn.execute(DELETE_FORM, user_id)
+    await conn.close()
 
 
 # Настройка логирования
@@ -431,16 +422,16 @@ async def process_broadcast_message(message: types.Message, state: FSMContext):
 @router.message(lambda message: message.text == "🔍Поиск")
 async def cmd_search(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     await update_message_count(user_id)  # Обновление количества отправленных сообщений
-
+    conn = await connection()
     # Получаем данные состояния
     data = await state.get_data()
     viewed_profiles = data.get("viewed_profiles", [])  # Получаем список просмотренных анкет
 
     # Получаем пол, возраст и предпочтения пользователя
-    cursor.execute("SELECT gender, target_gender, age FROM profiles WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
+    user = await conn.fetchrow(GET_USER_DATA, user_id)
+    #user = cursor.fetchone()
 
     if user is None:
         await message.answer("Сначала нужно зарегистрироваться. Нажмите 'РЕГИСТРАЦИЯ' для создания анкеты.")
@@ -459,20 +450,11 @@ async def cmd_search(message: types.Message, state: FSMContext):
     one_week_ago_str = one_week_ago.strftime("%Y-%m-%d %H:%M:%S")
 
     # Ищем анкеты противоположного пола и по возрасту, исключая уже просмотренные анкеты
-    cursor.execute(
-        """SELECT * FROM profiles 
-           WHERE user_id != ? 
-           AND gender = ? 
-           AND target_gender = ? 
-           AND age >= ? 
-           AND age <= ? 
-           AND last_activity >= ?  -- добавлено условие для активности
-           AND user_id NOT IN ({}) 
-           ORDER BY RANDOM() 
-           LIMIT 1""".format(','.join('?' * len(viewed_profiles)) if viewed_profiles else '0'),
+    profile = await conn.fetchrow(
+        SEARCH_FORMS.format(','.join('?' * len(viewed_profiles)) if viewed_profiles else '0'),
         (user_id, target_gender, user_gender, min_age, max_age, one_week_ago_str, *viewed_profiles)
     )
-    profile = cursor.fetchone()
+    #profile = cursor.fetchone()
 
     # Если анкета найдена
     if profile:
@@ -506,23 +488,23 @@ async def process_like_callback(call: types.CallbackQuery):
     user_id = call.from_user.id
     user_name = call.from_user.username
 
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
+    conn = await connection()
     # Проверяем, лайкал ли этот пользователь ранее
-    cursor.execute("SELECT * FROM likes WHERE user_id = ? AND liked_user_id = ?", (user_id, liked_user_id))
-    existing_like = cursor.fetchone()
+    existing_like = await conn.fetchrow(CHECK_LIKE, user_id, liked_user_id)
+    #existing_like = cursor.fetchone()
 
     if not existing_like:
         # Сохраняем лайк в базе данных
-        cursor.execute("INSERT INTO likes (user_id, liked_user_id, user_name, liked_name) VALUES (?, ?, ?, ?)",
-                       (user_id, liked_user_id, user_name, liked_username))
-        conn.commit()
+        await conn.execute(SAVE_LIKE,
+                       user_id, liked_user_id, user_name, liked_username)
 
         # Проверяем, ставил ли лайк другой пользователь
-        cursor.execute("SELECT * FROM likes WHERE user_id = ? AND liked_user_id = ?", (liked_user_id, user_id))
-        mutual_like = cursor.fetchone()
+        mutual_like = await conn.fetchrow(CHECK_LIKE, liked_user_id, user_id)
+        #mutual_like = cursor.fetchone()
 
         if mutual_like:
             # Если лайк взаимный, отправляем сообщение обоим пользователям
@@ -591,7 +573,7 @@ async def process_report_callback(call: types.CallbackQuery, state: FSMContext):
     user_id = call.from_user.id
     report_user_id = int(call.data.split("_")[1])  # ID пользователя, на которого жалуются
 
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -616,20 +598,21 @@ async def process_complaint_text(message: types.Message, state: FSMContext):
     complaint_text = message.text  # Текст жалобы
 
     # Обновляем время активности пользователя
-    update_last_activity(message.from_user.id)
+    await update_last_activity(message.from_user.id)
 
+    conn = await connection()
     # Получите информацию о пользователе, на которого жалуются
-    cursor.execute(
-        "SELECT name, username, gender, age, description, photo_id, target_gender FROM profiles WHERE user_id = ?",
-        (report_user_id,))
-    reported_user = cursor.fetchone()
+    reported_user = await conn.fetchrow(
+        REPORTED_USER,
+        report_user_id)
+    #reported_user = cursor.fetchone()
 
     if reported_user:
         reported_name, reported_username, gender, age, description, photo_id, target_gender = reported_user
         # Получите информацию о лайках для этого пользователя
-        cursor.execute("SELECT user_id, liked_user_id, liked_name FROM likes WHERE liked_user_id = ?",
-                       (report_user_id,))
-        like_info = cursor.fetchone()
+        like_info = await conn.fetchrow(LIKE_INFO,
+                       report_user_id)
+        #like_info = cursor.fetchone()
 
         if like_info:
             liked_user_id, liked_name = like_info[1], like_info[2]  # Извлекаем liked_user_id и liked_name
@@ -680,7 +663,7 @@ async def process_dislike_callback(call: types.CallbackQuery):
     disliked_user_id = int(call.data.split("_")[1])  # Получаем ID дизлайкнутого пользователя
     liked_name = call.data.split("_")[2]  # Получаем имя лайкнутого пользователя
 
-    update_last_activity(call.from_user.id)  # Обновляем время активности пользователя
+    await update_last_activity(call.from_user.id)  # Обновляем время активности пользователя
 
     # Отправляем сообщение в чат
     await call.message.answer("👎👎👎 Вы поставили Дизлайк!")
@@ -699,14 +682,14 @@ async def process_dislike_callback(call: types.CallbackQuery):
 async def cmd_my_profile(message: types.Message):
     user_id = message.from_user.id
 
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
-
+    conn = await connection()
     # Получаем анкету пользователя из базы данных
-    cursor.execute("SELECT name, age, description, gender, target_gender, photo_id FROM profiles WHERE user_id = ?", (user_id,))
-    profile = cursor.fetchone()
-
+    profile = await conn.fetchrow(FORM_INFO, user_id)
+    #profile = cursor.fetchone()
+    await conn.close()
     if profile:
         name, age, description, gender, target_gender, photo_id = profile
 
@@ -730,8 +713,8 @@ async def cmd_my_profile(message: types.Message):
 @router.message(lambda message: message.text == "✏️Редактировать анкету")
 async def cmd_edit_profile(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    update_last_activity(user_id)  # Обновляем время активности пользователя
-    reset_likes(user_id)     # Сбрасываем лайки перед редактированием анкеты
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
+    await reset_likes(user_id)     # Сбрасываем лайки перед редактированием анкеты
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
@@ -745,12 +728,13 @@ async def cmd_edit_profile(message: types.Message, state: FSMContext):
 @router.message(lambda message: message.text == "✂️Удалить анкету")
 async def cmd_delete_profile(message: types.Message):
     user_id = message.from_user.id
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
+    conn = await connection()
 
-    cursor.execute("DELETE FROM profiles WHERE user_id = ?", (user_id,))
-    conn.commit()
+    await conn.execute(DELETE_FORM, user_id)
+    await conn.close()
     await message.answer("Ваша анкета была успешно удалена! Если хотите, можете зарегистрироваться заново.",
                          reply_markup=await kb.start_keyboard())
 
@@ -758,7 +742,7 @@ async def cmd_delete_profile(message: types.Message):
 @router.message(lambda message: message.text == "↪️Назад")
 async def cmd_back_to_search(message: types.Message):
     user_id = message.from_user.id
-    update_last_activity(user_id)  # Обновляем время активности пользователя
+    await update_last_activity(user_id)  # Обновляем время активности пользователя
     # Обновление количества отправленных сообщений
     await update_message_count(user_id)
 
