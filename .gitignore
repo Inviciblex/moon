@@ -1,0 +1,9 @@
+.env
+bot.log
+/.venv
+/__pycache__
+config.py
+db.sqlite3
+docker-compose.yml
+.idea
+bot_database.db

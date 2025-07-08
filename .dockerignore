@@ -1,0 +1,11 @@
+.env
+bot.log
+/.venv
+/__pycache__
+db.sqlite3
+docker-compose.yml
+.idea
+bot_database.db
+.gitignore
+.git
+Readme.md
