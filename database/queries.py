@@ -13,7 +13,16 @@ AVG_AGE = """
 """
 
 ACTIVE_TIME = """
-    SELECT strftime('%H:00', last_activity) AS hour, COUNT(*) FROM profiles GROUP BY hour ORDER BY COUNT(*) DESC LIMIT 1
+    SELECT 
+    SUBSTRING(last_activity FROM 12 FOR 2) || ':00' AS hour,
+    COUNT(*) 
+FROM 
+    profiles 
+GROUP BY 
+    hour 
+ORDER BY 
+    COUNT(*) DESC 
+LIMIT 1
 """
 
 TOTAL_USERS = """

@@ -279,7 +279,7 @@ class PrivateMessageState(StatesGroup):
 # Функция для получения ID пользователя по username (пример)
 async def get_user_id_by_username(username):
     conn = await connection()
-    result = conn.fetchrow(GET_ID_BY_USERNAME, username)
+    result = await conn.fetchrow(GET_ID_BY_USERNAME, username)
     await conn.close()
     return result[0] if result else None
 
