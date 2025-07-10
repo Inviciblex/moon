@@ -451,8 +451,8 @@ async def cmd_search(message: types.Message, state: FSMContext):
 
     # Ищем анкеты противоположного пола и по возрасту, исключая уже просмотренные анкеты
     profile = await conn.fetchrow(
-        SEARCH_FORMS.format(','.join('?' * len(viewed_profiles)) if viewed_profiles else '0'),
-        (user_id, target_gender, user_gender, min_age, max_age, one_week_ago_str, *viewed_profiles)
+        SEARCH_FORMS.format(','.join(['%7'] * len(viewed_profiles)) if viewed_profiles else 'NULL'),
+        user_id, target_gender, user_gender, min_age, max_age, one_week_ago_str, *viewed_profiles
     )
     #profile = cursor.fetchone()
 

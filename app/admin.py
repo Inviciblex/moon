@@ -15,27 +15,6 @@ async def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
 
 
-@admin.message(Command(commands=["db"]))
-async def send_db_file(message: types.Message):
-    user_id = message.from_user.id
-
-    # Проверяем, является ли пользователь администратором
-    if await is_admin(user_id):
-        try:
-            # Путь к файлу базы данных
-            db_file_path = "../users.db"  # Убедитесь, что файл существует в этой директории
-            db_file = FSInputFile(db_file_path)
-
-            # Отправляем файл администратору
-            await message.answer_document(db_file)
-            await message.answer("📌📌📌Вот ваша база данных, админ! 😉")
-        except Exception as e:
-            await message.answer(f"Произошла ошибка при отправке файла: {e}")
-    else:
-        # Если пользователь не администратор
-        await message.answer("Эта команда доступна только администраторам!")
-
-
 # Обработчик команды /logs для администраторов
 @admin.message(Command(commands=["logs"]))
 async def send_logs_command(message: types.Message):

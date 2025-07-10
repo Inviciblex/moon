@@ -2,20 +2,16 @@ import asyncio
 import asyncpg
 import logging
 import sys
-import sqlite3
 import datetime  # Не забудьте импортировать datetime
 from aiogram.fsm.storage.memory import MemoryStorage
 import os
 from dotenv import load_dotenv
-from config import ADMINS
-from aiogram.types import FSInputFile
-from aiogram.filters import Command
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from app.handlers import router
 from app.admin import admin
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from datetime import datetime, timedelta
+from datetime import datetime
 from database.queries import *
 from database.create import *
 from database.connection import connection
@@ -47,14 +43,7 @@ async def update_last_activity(user_id):
 
 async def main() -> None:
     # Подключение к базе данных PostgreSQL
-    """conn = await asyncpg.connect(
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        database=os.getenv("POSTGRES_DB"),
-        host=os.getenv("POSTGRES_HOST")  # или IP вашего PostgreSQL-сервера
-    )"""
     conn = await connection()
-    #conn = sqlite3.connect("users.db")
     #cursor = conn.cursor()
 
     # Создание таблицы профилей, если она не существует
