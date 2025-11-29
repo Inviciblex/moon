@@ -1,0 +1,15 @@
+name: Test Pipeline
+
+on:
+  push:
+    branches: [ feature/add-pipeline ]  # запуск при пуше в main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run simple script
+        run: echo "Pipeline working!"
